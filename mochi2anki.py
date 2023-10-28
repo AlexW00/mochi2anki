@@ -1,101 +1,52 @@
 import json
-import random
-import yaml
-import os
-import genanki
+import requests
 import sys
+import yaml
 
-def generate_anki_id():
-    return random.randrange(1 << 30, 1 << 31)
+def invoke(action, params={}):
+    request = {'action': action, 'params': params, 'version': 6}
+    response = requests.post('http://localhost:8765', json=request).json()
 
-def create_anki_deck(data, config):
-    decks = data['~:decks']
+    if len(response) != 2:
+        raise Exception("response has an unexpected number of fields")
+    if 'error' not in response:
+        raise Exception("response is missing required error field")
+    if 'result' not in response:
+        raise Exception("response is missing required result field")
+    if response['error'] is not None:
+        raise Exception(response['error'])
+    return response['result']
 
-    front_fields = config['front']["fields"]
-    back_fields = config['back']["fields"]
-    fields = front_fields + back_fields
+def import_cards_into_anki_deck(data, config):
+    anki_deck_name = config['anki_deck_name']
+    field_mapping = config['field_mapping']
 
-    # Create template based on the configuration
-    front_template = "<br>".join(["{{" + field['name'] + "}}" for field in front_fields])
-    back_template = "<br>".join(["{{" + field['name'] + "}}" for field in back_fields])
-
-    templates = {
-        'name': config['anki_template_name'],
-        'qfmt': front_template,
-        'afmt': back_template,
-    }
-
-    model = genanki.Model(
-        generate_anki_id(),  # Some random model ID
-        config['anki_model_name'],
-        fields=fields,
-        templates=[templates]
-    )
-
-    # Create the Anki deck
-    anki_deck = genanki.Deck(
-        generate_anki_id(),  # Some random deck ID
-        data['~:decks'][0]['~:name']
-    )
-
-    for deck in decks:
-
+    for deck in data['~:decks']:
         cards_data = deck['~:cards']['~#list']
-        deck_template_id = None
-        try:
-            deck_template_id = deck['~:template-id']
-        except KeyError:
-            print(f"Deck {deck['~:name']} has no template-id")
-            
         for card_data in cards_data:
-            card_template_id = deck_template_id
+            fields = {}
+            for mochi_field, anki_field in field_mapping.items():
+                try:
+                    fields[anki_field] = card_data['~:fields'][mochi_field]['~:value']
+                except KeyError:
+                    print(f"Field {mochi_field} not found in card {card_data['~:id']}")
+                    fields[anki_field] = ""
+
+            anki_note = {
+                "deckName": anki_deck_name,
+                "modelName": config['anki_model_name'],
+                "fields": fields,
+                "tags": [],
+            }
+
             try:
-                card_template_id = card_data['~:template-id']
-            except KeyError:
-                print(f"Card {card_data['~:id']} has no template-id, using deck template-id")
-
-            if card_template_id is None:
-                print(f"Card {card_data['~:id']} has no template-id, skipping")
-                continue
-
-            if card_template_id != config['template_id']:
-                print(f"Card {card_data['~:id']} has template-id {card_template_id}, skipping")
-                continue
-
-            fields_data = []
-
-            front_fields_data = []
-            back_fields_data = []
-
-            for field in front_fields:
-                try:
-                    front_fields_data.append(card_data['~:fields'][field['id']]['~:value'])
-                except KeyError:
-                    front_fields_data.append("")
-                    print(f"Field {field['id']} not found in card {card_data['~:id']}")
-
-            for field in back_fields:
-                try:
-                    back_fields_data.append(card_data['~:fields'][field['id']]['~:value'])
-                except KeyError:
-                    back_fields_data.append("")
-                    print(f"Field {field['id']} not found in card {card_data['~:id']}")
-
-            fields_data = front_fields_data + back_fields_data
-
-            card = genanki.Note(
-                model=model,
-                fields=fields_data
-            )
-            anki_deck.add_note(card)
-
-    # Save the deck to a file
-    genanki.Package(anki_deck).write_to_file(config.get('output_file', 'output.apkg'))
+                result = invoke('addNote', {'note': anki_note})
+            except Exception as e:
+                print(f"Error adding card {card_data['~:id']}: {e}")
+                continue            
 
 if __name__ == '__main__':
     # Load the configuration from the YAML file
-    # get config file and data file from args
-
     config_filepath = None
     data_filepath = None
 
@@ -106,8 +57,8 @@ if __name__ == '__main__':
             data_filepath = arg
         
     if config_filepath is None or data_filepath is None:
-        print("Usage: python convert.py config.yml data.json")
-        exit(1)
+        print("Usage: python import_anki_cards.py config.yml data.json")
+        sys.exit(1)
 
     with open(config_filepath, 'r') as config_file:
         print("Loading config...")
@@ -118,6 +69,6 @@ if __name__ == '__main__':
         print("Loading data...")
         data = json.load(data_file)
 
-    print("Creating Anki deck...")
-    create_anki_deck(data, config)
+    print("Importing cards into Anki deck...")
+    import_cards_into_anki_deck(data, config)
     print("Done!")

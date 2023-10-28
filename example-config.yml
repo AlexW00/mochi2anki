@@ -1,25 +1,9 @@
-output_file: ./output.apkg # (optional)
+anki_deck_name: "01 - vocab::inbox"
+anki_model_name: "Japanese Vocab"
 
-# you can find the id of a template
-# in the Mochi tempalte editor:
-# hover template -> (...) -> copy id
-
-# the id of template whose cards should be converted
-# other cards will be ignored (-> run the script for each template if you have multiple)
-template_id: "~:IRd8fevy"
-
-anki_model_name: "Voc (jap)" # model name in anki
-anki_template_name: "Voc (jap)" # template name in anki
-
-front: # defines the fields on the front of an anki card
-  fields:
-    - id: "~:name" # mochi field id (find in template editor -> right click field -> copy id)
-      name: "translation" # name the field will have in anki (independent of mochi)
-    - id: "~:f2ztyGzU"
-      name: "t note"
-back:
-  fields:
-    - id: "~:yk3E2O3Z"
-      name: "furi"
-    - id: "~:j2NCrJoR"
-      name: "f note"
+field_mapping:
+  "~:yk3E2O3Z": "japanese"
+  "~:j2NCrJoR": "japanese - note"
+  "~:name": "glossary"
+  "~:f2ztyGzU": "glossary - note"
+output_file: "output.apkg"
